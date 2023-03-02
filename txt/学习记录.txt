@@ -1,0 +1,88 @@
+核心·网卡·接管起点：p_fwdataplane_interface_take_over
+保存接口信息表项：g_dp_if_table
+接口表初始化
+dp_if_init
+    dp_interface_init_fwprocess
+        dp_if_statistics_reinit：初始化
+            sup_port_config.ini 读取网卡信息（读写队列，mac地址，驱动名字）
+
+清理：dp_if_tab_deinit
+
+
+
+网卡接管起点：sf_eth_dev_fast_attach
+sf_device_nic_info_t 网卡结构体
+
+
+创建虚拟接口：
+    结构体： rte_kni_conf
+    函数：dp_kni_alloc
+    通过 phys_to_virt 将 ring 的物理地址转成虚拟地址使用，这样就保证了 KNI 的用户态和内核态使用同一片物理地址，从而做到零拷贝。
+    kni的整体的整体实现原理是采用共享内存方式，如下图通过DPDK创建rx_q，tx_q，并将其地址传递给kni内核模块，来实现rx_q和tx_q的内存共享，之后DPDK和内核就可以将数据放入对应的共享内存队列中完成报文的收发。下面分别介绍kni的内核部分和用户态部分
+    http://blog.chinaunix.net/uid-28541347-id-5856227.html
+    内核向dpdk通过虚拟口发包kni_net_tx
+    dpdk通过虚拟向内核发包netif_rx_ni
+
+网卡PIC详细
+cat /sys/devices/pci0000:00/0000:00:06.0/0000:01:00.0/resource
+cat /sys/bus/pci/devices/0000:01:04.0
+
+dpdk：
+rte_eth_dev_attach（网卡接管逻辑，注意当前非线程安全，多线程需要个人保证）
+
+网卡初始化以及接管逻辑：
+    dp_if_init
+        dp_interface_uuid_table_init
+        dp_if_tab_init
+        dp_register_fw_start_callback //转发进程启动顺序
+            <->dp_pcapif_init_fwprocess
+                dp_local_if_create //生成本地端口
+                    dp_kni_create
+                        dp_kni_alloc->rte_kni_alloc //申请内核网卡  （rte_kni_release释放内核网卡）
+                        dp_local_if_set_promiscuous //设置端口混杂描述
+                        dp_local_if_set_mac
+                        dp_local_if_set_up
+            <->dp_lacpif_init_fwprocess
+            <->dp_interface_init_fwprocess
+        dp_if_id_map_init
+        sf_eth_dev_take_over_all  //默认接管全部网卡
+            sf_get_phy_nic_info //获取读取网卡信息
+            sf_eth_dev_take_over_one
+                sf_eth_dev_attach
+                    parse_pci_info
+                    rte_eth_dev_detach //释放网卡占用位置（从dpdk释放网卡占位置）非线程安全的
+                    rte_eth_dev_attach  //真实网卡占用
+
+dataplane网卡接管逻辑：
+  首先开机启动通过/sfos/system/bin/nic_init.py脚本去获取网卡信息（通过pci总线获取当前系统全部网卡信息）然后写入/var/run/nic_info.json
+标记网卡pci、名称、队列、位置、型号等信息。dp启动过程中通过去读当前文件获取网卡信息，然后在linux内核上创建虚拟网卡，然后通过虚拟网卡名字占用dpdk网卡id。
+后续启动过程中先卸载等价虚拟网卡，在吧物理网卡注册到dpdk防止乱序。
+
+sigaction：信号注册过程中参数：
+1、SA_ONSTACK：捕获在信号调用栈中的信号。
+2、SA_RESTART：由此信号中断的系统调用会自动重启。
+3、SA_NODEFER: 一般情况下， 当信号处理函数运行时，内核将阻塞<该给定信号 -- SIGINT>。但是如果设置了SA_NODEFER标记， 那么在该信号处理函数运行时，内核将不会阻塞该信号。 
+4、SA_RESETHAND: 当调用信号处理函数时，将信号的处理函数重置为缺省值。（一般我们不需要在处理函数被调用后，立马设置为缺省值）
+这两个标志对应早期的不可靠信号机制，除非明确要求使用早期的不可靠信号，否则不应该使用。这里也不多做介绍。
+5、SA_NOCLDSTOP:  一般当进程终止或停止时都会产生SIGCHLD信号，但若对SIGCHLD信号设置了该标志,当**子进程停止**时不产生此信号。当子进程终止时才产生此信号。
+6、SA_NOCLDWAIT: (字面理解是：子进程不等待，也就是直接退出 ，这样就不会存在僵尸进城) 若信号是 SIGCHLD时，当使用此标志时，
+1 ）当调用进程的子进程终止时不创建僵尸进程。
+2 ）若调用进程在后面调用wait。则调用进程阻塞，直到其所有子进程都终止
+
+7、SA_SIGINFO:简单讲就是，可是使我们定义的处理函数中，多一个info参数，这个参数中包含了，信号的相关信息。
+在开头我们看到 struct sigacton结构有一个  void    (*sa_tramp)(void *, int, int, siginfo_t *, void *); 字段，该字段是一个 替代的信号处理函数。
+当我们没有使用 SA_SIGINFO 标志时，调用的是 sa_handler指定的信号处理函数。
+当指定了该标志后，该标志对信号处理函数提供了附加的信息，一个指向siginfo结构的消息和一个指向进程上下文标识符
+的指针这时我们就能调用sa_sigaction指定的信号处理函数
+
+8、SA_USERTRAMP:字面意思理解：不从内核态跳出。（信号捕捉过程中，有四次权限变更，该标志位的具体作用，暂时还不清楚....）
+
+注意：
+使用signal、sigaction处理信号后，返回原始位置继续运行（而不是进程结束），存在1：当前函数一直反复调用（系统本身出现信号7，恢复原始位置一直出，系统无法正常运行。建议处理完成直接结束程序或者取消当前信号接管）
+2原本配置出core，但是修改后面并不会走系统默认逻辑
+
+
+
+uio
+gio
+wk网卡队列
