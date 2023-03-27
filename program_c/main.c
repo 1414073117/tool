@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,7 +8,6 @@
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
-
 /*
 void signal_handler(int signo, siginfo_t info, void *extra)
 {
@@ -149,9 +149,6 @@ int main()
 }
 
 
-*/
-
-/*
 
 #define SF_PERF_FILENAME_MAXLEN    1024
 #define SF_PERF_SLEEP              10
@@ -392,6 +389,7 @@ int printf_byteH(unsigned long long byte, char *str)
     return str_size;
 }
 
+/*
 int main()
 {
     printf("sf_ddos_local_bypass_key_t               sizeof:%u\n", sizeof(sf_ddos_local_bypass_key_t));
@@ -409,5 +407,77 @@ int main()
 //     ddos_dip_entry_t dip = {0};
 //     printf("dip");
 
+    return 0;
+}
+*/
+
+typedef struct {
+    volatile sf_int64_t cnt;  /**< Internal counter value. */
+} sf_atomic64_t;
+
+typedef struct dp_persist_element1 
+{
+    sf_uint32_t src_ip;
+    sf_uint32_t dst_ip;
+    sf_uint32_t gateway;
+    sf_uint32_t out_ifid;
+    sf_uint16_t hagroup_id;
+    sf_uint16_t pool_id;
+    sf_uint8_t  type;
+    sf_uint8_t  core_id;
+    struct rcu_head rcu_list;
+    sf_atomic64_t expire_time;
+} dp_persist_element1_t;
+
+typedef struct dp_persist_element2
+{
+    sf_uint32_t src_ip;
+    sf_uint32_t dst_ip;
+    sf_uint32_t gateway;
+    sf_uint32_t out_ifid;
+    sf_uint16_t hagroup_id;
+    sf_uint16_t pool_id;
+    sf_uint8_t  type;
+    sf_uint8_t  core_id;
+    struct rcu_head rcu_list;
+    sf_atomic64_t expire_time;
+    sf_uint64_t originate_time;
+} dp_persist_element2_t;
+
+typedef struct dp_persist6_element1 
+{
+    sf_ipaddr6_t src_ip;
+    sf_ipaddr6_t dst_ip;
+    sf_ipaddr6_t gateway; //下一跳网关
+    sf_uint32_t out_ifid;
+    sf_uint16_t hagroup_id;
+    sf_uint16_t pool_id;
+    sf_uint8_t type; //区分是否是pbr产生的会话保持表项,考虑后续ecmp做会话保持
+    sf_uint8_t core_id; //core_id
+    struct rcu_head rcu_list;
+    sf_atomic64_t expire_time;
+} dp_persist6_element1_t;
+
+typedef struct dp_persist6_element2
+{
+    sf_ipaddr6_t src_ip;
+    sf_ipaddr6_t dst_ip;
+    sf_ipaddr6_t gateway; //下一跳网关
+    sf_uint32_t out_ifid;
+    sf_uint16_t hagroup_id;
+    sf_uint16_t pool_id;
+    sf_uint8_t type; //区分是否是pbr产生的会话保持表项,考虑后续ecmp做会话保持
+    sf_uint8_t core_id; //core_id
+    struct rcu_head rcu_list;
+    sf_atomic64_t expire_time;
+    sf_uint64_t originate_time;
+} dp_persist6_element2_t;
+
+int main()
+{
+    printf("dp_persist_element1_t               sizeof:%u\n", sizeof(dp_persist_element1_t));
+    printf("dp_persist_element2_t               sizeof:%u\n", sizeof(dp_persist_element2_t));
+    printf("dp_persist6_element1_t               sizeof:%u\n", sizeof(dp_persist6_element1_t));
+    printf("dp_persist6_element2_t               sizeof:%u\n", sizeof(dp_persist6_element2_t));
     return 0;
 }

