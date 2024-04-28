@@ -22,7 +22,7 @@ Schema = {
     # "/sfos/system/etc/schema/config/networkplatform/config.dnstransparentproxy.schema" : "net.dnstransparentproxy",
     # "/sfos/system/etc/schema/config/networkplatform/config.netobj.schema" : "net.netobjs",
     # "/sfos/system/etc/schema/config/networkplatform/config.serv.schema" : "net.servs",
-    "/sfos/system/etc/schema/config/networkplatform/config.zone.schema" : "net.zones",
+    # "/sfos/system/etc/schema/config/networkplatform/config.zone.schema" : "net.zones",
     # "/sfos/system/etc/schema/config/networkplatform/config.interface.schema" : "net.interfaces",
     # "/sfos/system/etc/schema/config/networkplatform/config.ripnginterface.schema" : "net.ripng.if",
     # "/sfos/system/etc/schema/config/networkplatform/config.ripng.schema" : "net.ripngs",
@@ -35,6 +35,11 @@ Schema = {
     # "/sfos/system/etc/schema/config/networkplatform/config.appcontrol.local.droplist.schema" : "cfg.analylocal",
     # "/sfos/system/etc/schema/config/networkplatform/config.networkparams.schema" : "cfg.networkParams",
     # "/sfos/system/schema/config/serviced/config.contsec.schema" : "cfg.contsectemplate",
+    # "/sfos/system/schema/config/networkplatform/config.qosvlines.schema" : "net.qosClassList",
+    # "/sfos/system/schema/config/networkplatform/config.systime.schema" : "sysTime",
+    "/sfos/system/schema/config/networkplatform/config.ddnsPolicy.schema" : "net.ddns.policys",
+    # "/sfos/system/schema/config/networkplatform/config.ddnsPolicy.schema" : "net.ddns.providers",
+    #"/sfos/system/schema/config/networkplatform/config.appIdentify.schema" : "appIdentify.objs",
 }
 
 def getjgt(cstenant,csfile,csname):

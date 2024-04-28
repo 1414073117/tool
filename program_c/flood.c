@@ -41,6 +41,18 @@ struct pseudo_hdr
     unsigned short len;     // 2 bytes
 };
 
+struct ipv4_ip{
+    union {
+        unsigned int addr32;
+        unsigned char addr8[4];
+    };
+};
+
+struct ipv4_segment{
+    struct ipv4_ip sip, eip;
+    char *str;
+};
+
 /*
  * Checksums for x86-64
  * Copyright 2002 by Andi Kleen, SuSE Labs
@@ -425,8 +437,8 @@ volatile uint64_t totalData = 0;
 struct pthread_info
 {
     char *interface;
-    char *sIP;
-    char *dIP;
+    struct ipv4_segment sIP;
+    struct ipv4_segment dIP;
     uint16_t port;
     uint16_t sport;
     uint64_t interval;
@@ -467,6 +479,38 @@ struct pthread_info
     uint16_t id;
 } g_info;
 
+void convert_to_ip_range(struct ipv4_segment* ip_seg)
+{
+    char ipd[40], mask[40], *ip = ip_seg->str;
+    unsigned int uint_ip, uint_mask;
+    if (strstr(ip, "-") != NULL) {
+        sscanf(ip, "%[^-]-%s", ipd, mask);
+        ip_seg->sip.addr32 = inet_addr(ipd);
+        ip_seg->eip.addr32 = inet_addr(mask);
+    } else if (strstr(ip, "/") != NULL) {
+        sscanf(ip, "%[^/]/%s", ipd, mask);
+        uint_ip = inet_addr(ipd);
+        if (strstr(mask, ".") != NULL) {
+            uint_mask = inet_addr(mask);
+        } else {
+            uint_mask = 1;
+            size_t i;
+            for (i = atoi(mask); i > 1; i--) {
+                uint_mask  =  (uint_mask << 1) + 1;
+            }
+            
+        }
+
+        ip_seg->sip.addr32 = uint_ip & uint_mask;
+        ip_seg->eip.addr32 = uint_ip | (~uint_mask);
+    } else {
+        ip_seg->sip.addr32 = inet_addr(ip);
+        ip_seg->eip.addr32 = ip_seg->sip.addr32;
+    }
+
+    return ;
+}
+
 void signalHndl(int tmp)
 {
     cont = 0;
@@ -493,13 +537,40 @@ void GetGatewayMAC(uint8_t *MAC)
 
 uint16_t randNum(uint16_t min, uint16_t max, unsigned int seed)
 {
+    seed = rand();
     return (rand_r(&seed) % (max - min + 1)) + min;
+}
+
+unsigned random_ip(struct ipv4_segment* ip_seg, unsigned int seed)
+{
+    struct ipv4_ip s_ip, e_ip, ip;
+    unsigned int scope = 0;
+    if (ip_seg == NULL) {
+        return 0;
+    }
+
+    s_ip.addr32 = ntohl(ip_seg->sip.addr32);
+    e_ip.addr32 = ntohl(ip_seg->eip.addr32);
+    scope = e_ip.addr32 - s_ip.addr32;
+    if (scope == 0) {
+        ip.addr32 = 0;
+    } else {
+        size_t i;
+        for (i = 0; i < 4; i++) {
+            ip.addr8[i] = randNum(0, 0xff, seed);
+        }
+
+        ip.addr32 = ip.addr32 % scope;
+    }
+
+    return ntohl(s_ip.addr32 + ip.addr32);
 }
 
 void *threadHndl(void *data)
 {
     // Pass info.
     struct pthread_info *info = (struct pthread_info *)data;
+    srand(time(NULL) + getpid() + pthread_self());
 
     // Create sockaddr_ll struct.
     struct sockaddr_ll sin;
@@ -592,33 +663,34 @@ void *threadHndl(void *data)
             dstPort = info->port;
         }
 
-        char IP[32];
+        unsigned int IP;
 
-        if (info->sIP == NULL)
+        if (info->sIP.str == NULL)
         {
             // Spoof source IP as any IP address.
-            uint8_t tmp[4];
+            struct ipv4_ip tmp;
 
             if (info->internal)
             {
-                tmp[0] = randNum(10, 10, seed);
-                tmp[1] = randNum(0, 254, seed + 1);
-                tmp[2] = randNum(0, 254, seed + 2);
-                tmp[3] = randNum(0, 254, seed + 3);
+                tmp.addr8[0] = randNum(10, 10, seed);
+                tmp.addr8[1] = randNum(0, 254, seed + 1);
+                tmp.addr8[2] = randNum(0, 254, seed + 2);
+                tmp.addr8[3] = randNum(0, 254, seed + 3);
             }
             else
             {
-                tmp[0] = randNum(1, 254, seed);
-                tmp[1] = randNum(0, 254, seed + 1);
-                tmp[2] = randNum(0, 254, seed + 2);
-                tmp[3] = randNum(0, 254, seed + 3);
+                tmp.addr8[0] = randNum(1, 254, seed);
+                tmp.addr8[1] = randNum(0, 254, seed + 1);
+                tmp.addr8[2] = randNum(0, 254, seed + 2);
+                tmp.addr8[3] = randNum(0, 254, seed + 3);
             }
 
-            sprintf(IP, "%d.%d.%d.%d", tmp[0], tmp[1], tmp[2], tmp[3]);
+            // sprintf(IP, "%d.%d.%d.%d", tmp[0], tmp[1], tmp[2], tmp[3]);
+            IP = tmp.addr32;
         }
         else
         {
-            memcpy(IP, info->sIP, strlen(info->sIP));
+            IP = random_ip(&info->sIP, seed);
         }
 
         // Initialize packet buffer.
@@ -681,8 +753,8 @@ void *threadHndl(void *data)
 
         iph->id = 0;
         iph->frag_off = 0;
-        iph->saddr = inet_addr(IP);
-        iph->daddr = inet_addr(info->dIP);
+        iph->saddr = IP;
+        iph->daddr = random_ip(&info->dIP, seed);
         iph->tos = info->tos;
 
         iph->ttl = (uint8_t)randNum(info->minTTL, info->maxTTL, seed);
@@ -980,12 +1052,14 @@ void parse_command_line(int argc, char *argv[])
                 break;
 
             case 's':
-                g_info.sIP = optarg;
+                g_info.sIP.str = optarg;
+                convert_to_ip_range(&g_info.sIP);
 
                 break;
 
             case 'd':
-                g_info.dIP = optarg;
+                g_info.dIP.str = optarg;
+                convert_to_ip_range(&g_info.dIP);
 
                 break;
 
@@ -1182,7 +1256,7 @@ int main(int argc, char *argv[])
     }
 
     // Check if destination IP argument was set.
-    if (g_info.dIP == NULL)
+    if (g_info.dIP.str == NULL)
     {
         fprintf(stderr, "Missing --dst option\n");
 
@@ -1193,7 +1267,7 @@ int main(int argc, char *argv[])
     pthread_t pid[g_info.threads];
 
     // Print information.
-    fprintf(stdout, "Launching against %s:%d (0 = random) from interface %s. Thread count => %d and Interval => %" PRIu64 " micro seconds.\n", g_info.dIP, g_info.port, g_info.interface, g_info.threads, g_info.interval);
+    fprintf(stdout, "Launching against %s:%d (0 = random) from interface %s. Thread count => %d and Interval => %" PRIu64 " micro seconds.\n", g_info.dIP.str, g_info.port, g_info.interface, g_info.threads, g_info.interval);
 
     // Start time.
     startTime = time(NULL);

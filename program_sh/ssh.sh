@@ -10,11 +10,13 @@ function random()
     return $retnum;
 }
 
+exit 0
+
 while ((1))
 do
     random
     port=$?
-    retdata=$(curl http://192.168.2.2:$port)
-    echo $retdata
+    # retdata=$(curl http://192.168.2.2:$port)
+    echo $port
     sleep 30s
 done

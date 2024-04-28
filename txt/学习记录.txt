@@ -86,3 +86,51 @@ sigaction：信号注册过程中参数：
 uio
 gio
 wk网卡队列
+
+ddos功能分析：
+    1.抗地址欺骗攻击     不包含（可以通过arp功能配置实现）
+    2.抗源路由攻击       不包含（可以通过配置防火墙策略防止）
+    3.抗Smurf攻击       包含（ip-directed-broadcast）
+    4.抗LAND攻击        包含（land-attack）
+    5.抗Winnuke攻击     包含（winnuke）
+    6.抗Queso扫描       不包含
+    7.抗SYN/FIN扫描     包含（syn扫描，无fin扫描）
+    8.抗NULL扫描        包含（tcp-anomaly zero-flag）
+    9.抗圣诞树攻击       不包含（可通过开启tcp标志位检测进行防护）
+    10.抗FIN扫描        不包含
+    11.抗Fraggle攻击    不包含
+
+问题1分析：
+    1. lock与bvhash我是统一申请，如果有一个申请失败会释放另一个内存。释放时也是同步释放，不存在一个为空一个不为空情况。
+    2. 通过lock来判断当前需要结构体释放申请成功。在init前，如果已经不为空则已经申请，不需要再次申请。在DISABLE后面是判断是否已经释放，未释放才进行释放。（防止配置相同配置重复下发）
+问题2分析：
+    1. rcu_list_type是用来判断是否启用删除rcu逻辑，如果启动不再次调用防止重复上链。因为是在同一个线程运行所以使用u8为类型。
+问题3分析：
+    1. 后续进行测试包含，会话保持配置默认关闭、开启，杀掉dp.fw情况下，配置频繁修改后，一共4个场景下功能验证分析。会输出测试文档。
+问题4分析：
+    1. 后续对本次新增加的代码进行功能分析，统一输出到测试文档。
+问题5分析：
+    1.这个是双击同步场景，之前验证过，本次也会加强验证。
+
+
+测试场景详细分析：（正常：会话保持表项正常建立，无内存问题，流量正常选择会话保持表项，超时后会话保持自动清理，流量选择新的路径）
+    1.会话保持配置默认开启，杀掉dp.fw后，验证功能是否正常。重复多次下发配置最后配置为开启状态，验证功能是否正常。重复多次下发配置最后配置为关闭状态，验证功能是否正常。
+    2.会话保持配置默认关闭，杀掉dp.fw后，验证功能是否正常。重复多次下发配置最后配置为关闭状态，验证功能是否正常。重复多次下发配置最后配置为开启状态，验证功能是否正常。
+    3.asan包验证，配置多次重复下发，验证给功能否有异常。
+
+
+http://code.sangfor.org/pr/sangforos/sangforos/merge_requests/2475#
+http://code.sangfor.org/pr/sangforos/sangforos/merge_requests/2473#
+http://code.sangfor.org/pr/sangforos/sangforos/merge_requests/2476#
+http://code.sangfor.org/pr/sangforos/sangforos/merge_requests/2479#
+
+
+http://code.sangfor.org/pr/sangforos/sangforos/merge_requests/2482#
+http://code.sangfor.org/AF/af.ngaf/project/AF8.0.40/AF8.0.40/merge_requests/20772#
+
+
+http://code.sangfor.org/pr/sangforos/sangforos/merge_requests/2487#
+http://code.sangfor.org/pr/sangforos/sangforos/merge_requests/2488#
+http://code.sangfor.org/pr/sangforos/sangforos/merge_requests/2489#
+http://code.sangfor.org/pr/sangforos/sangforos/merge_requests/2490#
+
